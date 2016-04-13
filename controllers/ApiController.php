@@ -15,6 +15,7 @@ class ApiController extends Controller
 
     /*
         Probably XML file should be attached via AJAX.
+        $xml = file_get_contents('php://input');
         For the sake of simplicity, I just used static xml file `@webroot/trips.xml`
     */
     private function getData() {
@@ -22,7 +23,7 @@ class ApiController extends Controller
         
         try {
             //read example file
-            $root = new \SimpleXMLElement(file_get_contents($filename));
+            $root = @new \SimpleXMLElement(file_get_contents($filename));
             
         } catch (Exception $e) {
             Yii::error("Parse XML file error. " . $e->getMessage());
@@ -40,47 +41,54 @@ class ApiController extends Controller
 
         $root = $this->getData();
         if (!isset($root)) {
-            return $this->redirect('api/trip');
+            return array(
+                'error' => 'String could not be parsed as XML'
+            ); 
         }
 
         $boards = array();
         $offs = array();
         $residenceTime = array();
         $breakpoint = null;
+        $error = null;
         $segments = $root->AirSegments->AirSegment;
             
-        foreach ($segments as $segment) {
-            $key = count($residenceTime);
+        foreach ($segments as $key => $segment) {
             //find residence time
             $dateD = $segment->Departure['Date'] . ' ' . $segment->Departure['Time'];
             $dateA = $segment->Arrival['Date'] . ' ' . $segment->Arrival['Time'];
             $difference = strtotime($dateA) - strtotime($dateD);
             $residenceTime[$key] = $difference;
-             
+            
+            //save all board/off cities 
             array_push($boards, strval($segment->Board['City']));
             array_push($offs, strval($segment->Off['City']));
         }
 
-        //check for breakpoint
+        //check for breakpoint city
         foreach ($offs as $key => $value) {
+            if (count($offs) - 1 === $key) {
+                //break if the current off city is the last one
+                break;
+            }
             if ($value !== $boards[$key + 1]) {
                 $breakpoint = $value;
                 break;
             }
         }
 
-        $roundTrip = $boards[0] == $offs[count($offs) - 1];
+        $roundTrip = $boards[0] === $offs[count($offs) - 1];
         //destination - max residence time in a city
         $destination = $offs[max(array_keys($residenceTime))];
         
         return array(
-            'error' => false,
-            'boardsCities' => $boards, 
-            'offsCities' => $offs,
+            'error' => $error,            
             'roundTrip' => $roundTrip,
             'residenceSeconds' => $residenceTime,
             'destinationCity' => $destination,
-            'breakpoint' => $breakpoint
+            'breakpoint' => $breakpoint,
+            'boardCities' => $boards, 
+            'offCities' => $offs
         );
         
     }
@@ -89,7 +97,7 @@ class ApiController extends Controller
     {               
         Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;    
         return array(
-            'error' => 'Opps. Something goes wrong!'
+            'error' => 'Opps. Something goes wrong! Wrong API url'
         );  
     }
 
