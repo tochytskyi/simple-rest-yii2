@@ -49,46 +49,41 @@ class ApiController extends Controller
         $boards = array();
         $offs = array();
         $residenceTime = array();
-        $breakpoint = null;
+        $destinationCity = null;
+        $breakpointCity = null;
         $error = null;
+
         $segments = $root->AirSegments->AirSegment;
-            
-        foreach ($segments as $key => $segment) {
-            //find residence time
-            $dateD = $segment->Departure['Date'] . ' ' . $segment->Departure['Time'];
-            $dateA = $segment->Arrival['Date'] . ' ' . $segment->Arrival['Time'];
-            $difference = strtotime($dateA) - strtotime($dateD);
-            $residenceTime[$key] = $difference;
+        $segmentsCount = count($segments);    
+
+        for ($i = 0; $i < $segmentsCount - 1; $i++) {
+            $segmentFrom = $segments[$i];
+            $segmentTo = $segments[$i + 1];
+
+            //find residence time during each residence
+            $dateFrom = $segmentFrom->Arrival['Date'] . ' ' . $segmentFrom->Arrival['Time'];
+            $dateTo = $segmentTo->Departure['Date'] . ' ' . $segmentTo->Departure['Time'];
+            $difference = strtotime($dateTo) - strtotime($dateFrom);
+            $residenceTime[$i] = $difference;
+
+            //check for breakpoint cities
+            if (strval($segmentTo->Board['City']) !== strval($segmentFrom->Off['City'])) {
+                $breakpointCity = strval($segmentFrom->Off['City']);
+            }
             
             //save all board/off cities 
-            array_push($boards, strval($segment->Board['City']));
-            array_push($offs, strval($segment->Off['City']));
+            array_push($boards, strval($segmentFrom->Board['City']));
+            array_push($offs, strval($segmentFrom->Off['City']));
         }
 
-        //check for breakpoint city
-        foreach ($offs as $key => $value) {
-            if (count($offs) - 1 === $key) {
-                //break if the current off city is the last one
-                break;
-            }
-            if ($value !== $boards[$key + 1]) {
-                $breakpoint = $value;
-                break;
-            }
-        }
-
-        $roundTrip = $boards[0] === $offs[count($offs) - 1];
-        //destination - max residence time in a city
-        $destination = $offs[max(array_keys($residenceTime))];
+        //destination city - a city with max residence time
+        $maxTimeKey = array_keys($residenceTime, max($residenceTime));
+        $destinationCity = $offs[$maxTimeKey[0]];
         
         return array(
-            'error' => $error,            
-            'roundTrip' => $roundTrip,
-            'residenceSeconds' => $residenceTime,
-            'destinationCity' => $destination,
-            'breakpoint' => $breakpoint,
-            'boardCities' => $boards, 
-            'offCities' => $offs
+            'error' => $error,     
+            'destinationCity' => $destinationCity,
+            'breakpointCity' => $breakpointCity
         );
         
     }
